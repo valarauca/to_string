@@ -4,7 +4,7 @@
 
 use std::{
     borrow::Cow,
-    ffi::{OsStr,OsString},
+    ffi::{OsStr,OsString,CStr,CString},
 };
 
 /// Converts _something_ from the Rust standard library into
@@ -12,9 +12,116 @@ use std::{
 ///
 /// Generally this involves cloning what ever it is passed
 /// unless a comment notes that is is a special case.
+///
+/// When working with types that cannot be trusted to be
+/// converted to UTF-8 safely. The interface will replace
+/// bad characters with the `U+FFFD` replacement character
+///
+/// In the event the entire buffer is NOT utf8, it will return
+/// a buffer full of U+FFFD characters.
 pub trait IntoString {
     fn into_string(self) -> String;
 }
+
+
+impl<'a> IntoString for Cow<'a,CStr> {
+    // will attempt to gracefully transfer ownership
+    fn into_string(self) -> String {
+        match self {
+            Cow::Owned(x) => <CString as IntoString>::into_string(x),
+            Cow::Borrowed(x) => {
+                local_to_str(x.to_bytes())
+            }
+        }
+    }
+}
+impl<'a> IntoString for &Cow<'a,CStr> {
+    fn into_string(self) -> String {
+        local_to_str(self.to_bytes())
+    }
+}
+impl<'a> IntoString for &&Cow<'a,CStr> {
+    fn into_string(self) -> String {
+        local_to_str(self.to_bytes())
+    }
+}
+impl<'a> IntoString for &&&Cow<'a,CStr> {
+    fn into_string(self) -> String {
+        local_to_str(self.to_bytes())
+    }
+}
+impl<'a> IntoString for &&&&Cow<'a,CStr> {
+    fn into_string(self) -> String {
+        local_to_str(self.to_bytes())
+    }
+}
+
+impl IntoString for CString {
+    /// Special Case
+    ///
+    /// Will attempt to check & not-reallocate the buffer if possible
+    fn into_string(self) -> String {
+        match CString::into_string(self) {
+            Ok(x) => x,
+            Err(e) => {
+                local_to_str(e.into_cstring().as_bytes())
+            }
+        }
+    }
+}
+impl<'a> IntoString for &'a CString {
+    fn into_string(self) -> String {
+        local_to_str(self.to_bytes())
+    }
+}
+impl<'a> IntoString for &&'a CString {
+    fn into_string(self) -> String {
+        local_to_str(self.to_bytes())
+    }
+}
+impl<'a> IntoString for &&&'a CString {
+    fn into_string(self) -> String {
+        local_to_str(self.to_bytes())
+    }
+}
+impl<'a> IntoString for &&&&'a CString {
+    fn into_string(self) -> String {
+        local_to_str(self.to_bytes())
+    }
+}
+impl<'a> IntoString for &&&&&'a CString {
+    fn into_string(self) -> String {
+        local_to_str(self.to_bytes())
+    }
+}
+
+impl<'a> IntoString for &'a CStr {
+    fn into_string(self) -> String {
+        local_to_str(self.to_bytes())
+    }
+}
+impl<'a> IntoString for &&'a CStr {
+    fn into_string(self) -> String {
+        local_to_str(self.to_bytes())
+    }
+}
+impl<'a> IntoString for &&&'a CStr {
+    fn into_string(self) -> String {
+        local_to_str(self.to_bytes())
+    }
+}
+impl<'a> IntoString for &&&&'a CStr {
+    fn into_string(self) -> String {
+        local_to_str(self.to_bytes())
+    }
+}
+impl<'a> IntoString for &&&&&'a CStr {
+    fn into_string(self) -> String {
+        local_to_str(self.to_bytes())
+    }
+}
+
+
 
 impl<'a> IntoString for Cow<'a,OsStr> {
     /// Special case.
@@ -224,3 +331,14 @@ impl IntoString for &&&&&String {
     }
 }
 
+
+fn local_to_str(x: &[u8]) -> String {
+    match std::str::from_utf8(x) {
+        Ok(x) => x.to_string(),
+        Err(_) => {
+            let mut s = String::with_capacity(x.len());
+            s.extend((0..x.len()).map(|_| -> char { '\u{FFFD}' }));
+            s
+        }
+    }
+}
